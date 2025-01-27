@@ -111,15 +111,17 @@ impl App {
     }
 
     async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
-        if self.state.buffer == self.quote[self.state.current] && k == ' ' {
+        self.state.buffer.push(k);
+        if self.state.buffer[..self.state.buffer.len() - 1] == self.quote[self.state.current]
+            && k == ' '
+        {
             self.state.buffer.clear();
             self.state.current += 1;
-            if self.state.current == self.quote.len() {
-                self.completed = true;
-                self.running = false;
-            }
-        } else {
-            self.state.buffer.push(k);
+        } else if self.state.buffer == self.quote[self.state.current]
+            && self.state.current == self.quote.len() - 1
+        {
+            self.running = false;
+            self.completed = true;
         }
         return Ok(());
     }
