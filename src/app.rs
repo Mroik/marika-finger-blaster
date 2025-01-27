@@ -140,8 +140,13 @@ impl App {
         let done = self.quote[..self.state.current].join(" ");
         self.stdout.queue(Print(&done))?;
 
-        if !done.trim().is_empty() {
+        if done.chars().count() > 0 {
             self.stdout.queue(Print(" "))?;
+        }
+
+        let mut cur_loc = done.chars().count() + self.state.buffer.len();
+        if cur_loc > 0 {
+            cur_loc += 1;
         }
 
         for i in 0..self.state.buffer.len() {
@@ -175,6 +180,9 @@ impl App {
         self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
         let to_do = self.quote[self.state.current + 1..].join(" ");
         self.stdout.queue(Print(&to_do))?.queue(Print("\n"))?;
+
+        self.stdout.queue(MoveTo(cur_loc as u16, 0))?;
+
         self.stdout.flush()?;
         self.should_render = false;
         return Ok(());
