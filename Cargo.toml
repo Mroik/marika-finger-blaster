@@ -1,0 +1,10 @@
+[package]
+name = "typer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.27", features = ["derive"] }
+crossterm = "0.28.1"
+rand = "0.8.5"
+tokio = { version = "1.43.0", features = ["sync", "macros", "rt", "rt-multi-thread"] }
