@@ -11,6 +11,7 @@ pub enum Event {
     KeyPress(char),
     Backspace,
     Render,
+    ForceRender,
 }
 
 // TODO
@@ -22,6 +23,7 @@ pub async fn handle_input(sender: &Sender<Event>) -> Result<(), Box<dyn Error>> 
             //crossterm::event::Event::FocusGained => todo!(),
             //crossterm::event::Event::FocusLost => todo!(),
             //crossterm::event::Event::Paste(_) => todo!(),
+            crossterm::event::Event::Resize(_, _) => sender.send(Event::ForceRender).await?,
             crossterm::event::Event::Key(key_event) => {
                 if key_event.code == KeyCode::Char('c')
                     && key_event.modifiers == KeyModifiers::CONTROL

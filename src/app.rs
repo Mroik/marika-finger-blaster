@@ -8,7 +8,7 @@ use crossterm::{
     cursor::MoveTo,
     style::{Color, Print, SetForegroundColor},
     terminal::{
-        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
     ExecutableCommand, QueueableCommand,
@@ -102,6 +102,10 @@ impl App {
             Event::KeyPress(k) => self.handle_keypress(k).await?,
             Event::Backspace => self.handle_backspace().await,
             Event::Render => self.render().await?,
+            Event::ForceRender => {
+                self.should_render = true;
+                self.render().await?;
+            }
         }
 
         if event != Event::Render {
@@ -137,6 +141,7 @@ impl App {
             return Ok(());
         }
 
+        let (col, _) = terminal::size()?;
         self.stdout
             .queue(Clear(ClearType::All))
             .unwrap()
@@ -188,7 +193,8 @@ impl App {
         let to_do = self.quote[self.state.current + 1..].join(" ");
         self.stdout.queue(Print(&to_do))?.queue(Print("\n"))?;
 
-        self.stdout.queue(MoveTo(cur_loc as u16, 0))?;
+        self.stdout
+            .queue(MoveTo(cur_loc as u16 % col, cur_loc as u16 / col))?;
 
         self.stdout.flush()?;
         self.should_render = false;
