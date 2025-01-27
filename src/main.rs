@@ -3,6 +3,7 @@ pub mod event;
 
 use std::{error::Error, fs::read_to_string, path::Path};
 
+use app::App;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -44,8 +45,12 @@ fn generate_quotes(path: &Path) -> Result<Vec<Vec<String>>, Box<dyn Error>> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let path = Path::new(&args.quote_folder);
     let quotes = generate_quotes(&path).unwrap();
+    let mut app = App::new(&quotes);
+
+    app.run().await?;
+    return Ok(());
 }

@@ -1,21 +1,26 @@
 use std::{
     error::Error,
     io::{stdout, Stdout},
-    time::Duration,
 };
 
-use crossterm::event::{poll, read, KeyCode, KeyModifiers};
+use crossterm::{
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
+};
 use rand::Rng;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::{
+    spawn,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
-use crate::event::Event;
+use crate::event::{handle_input, Event};
 
-const TICK_RATE: u64 = 1000 / 20;
+pub const TICK_RATE: u64 = 1000 / 20;
 
 pub struct App {
     stdout: Stdout,
     quote: Vec<String>,
-    event_tx: Sender<Event>,
+    pub event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
     running: bool,
 }
@@ -34,39 +39,44 @@ impl App {
         }
     }
 
-    pub async fn run(&mut self) {
-        todo!()
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        self.stdout.execute(EnterAlternateScreen)?;
+        enable_raw_mode()?;
+
+        let (ks_tx, ks_rx): (Sender<()>, Receiver<()>) = channel(1);
+        let ev = self.event_tx.clone();
+        spawn(async {
+            start_input_handler(ev, ks_rx).await;
+        });
+
+        self.running = true;
+        while self.running {
+            self.process().await?;
+        }
+        let _ = ks_tx.send(());
+
+        disable_raw_mode()?;
+        self.stdout.execute(LeaveAlternateScreen)?;
+        return Ok(());
     }
 
-    // TODO
-    // - [ ] Pause on focus lost
-    // - [ ] Invalidate on paste
-    async fn handle_input(&mut self) -> Result<(), Box<dyn Error>> {
-        while self.running {
-            if poll(Duration::from_millis(TICK_RATE))? {
-                match read()? {
-                    //crossterm::event::Event::FocusGained => todo!(),
-                    //crossterm::event::Event::FocusLost => todo!(),
-                    //crossterm::event::Event::Paste(_) => todo!(),
-                    crossterm::event::Event::Key(key_event) => {
-                        if key_event.code == KeyCode::Char('c')
-                            && key_event.modifiers == KeyModifiers::CONTROL
-                        {
-                            self.event_tx.send(Event::Terminate).await?;
-                            continue;
-                        }
-                        if key_event.code == KeyCode::Backspace {
-                            self.event_tx.send(Event::Backspace).await?;
-                            continue;
-                        }
-                        if let KeyCode::Char(c) = key_event.code {
-                            self.event_tx.send(Event::KeyPress(c)).await?;
-                        }
-                    }
-                    _ => (),
-                }
+    async fn process(&mut self) -> Result<(), Box<dyn Error>> {
+        match self.event_rx.recv().await.unwrap() {
+            Event::Terminate => {
+                self.running = false;
             }
+            Event::KeyPress(_) => todo!(),
+            Event::Backspace => todo!(),
         }
         return Ok(());
+    }
+}
+
+async fn start_input_handler(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
+    loop {
+        tokio::select! {
+        _ = handle_input(&ev) => (),
+        _ = kill_switch.recv() => return,
+        }
     }
 }
