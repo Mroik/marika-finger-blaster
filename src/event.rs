@@ -1,1 +1,5 @@
-pub enum Event {}
+pub enum Event {
+    Terminate,
+    KeyPress(char),
+    Backspace,
+}
