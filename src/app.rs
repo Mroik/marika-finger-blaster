@@ -7,7 +7,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use rand::Rng;
 use tokio::{
     spawn,
     sync::mpsc::{channel, Receiver, Sender},
@@ -19,23 +18,27 @@ pub const TICK_RATE: u64 = 1000 / 20;
 
 pub struct App {
     stdout: Stdout,
-    quote: Vec<String>,
     pub event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
     running: bool,
+    quote: Vec<String>,
+    current: (usize, usize),
 }
 
 impl App {
-    pub fn new(quotes: &[Vec<String>]) -> App {
-        let mut rng = rand::thread_rng();
-        let chosen = rng.gen_range(0..quotes.len());
+    pub fn new(quote: String) -> App {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
         App {
             stdout: stdout(),
-            quote: quotes[chosen].clone(),
+            quote: quote
+                .split_whitespace()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect(),
             event_rx,
             event_tx,
             running: false,
+            current: (0, 0),
         }
     }
 
@@ -75,8 +78,8 @@ impl App {
 async fn start_input_handler(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
     loop {
         tokio::select! {
-        _ = handle_input(&ev) => (),
-        _ = kill_switch.recv() => return,
+            _ = handle_input(&ev) => (),
+            _ = kill_switch.recv() => return,
         }
     }
 }
