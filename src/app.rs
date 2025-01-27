@@ -1,17 +1,17 @@
 use std::{
     error::Error,
-    io::{stdout, Stdout},
+    io::{stdout, Stdout, Write},
     time::Duration,
 };
 
 use crossterm::{
-    cursor::{Hide, MoveTo, Show},
-    style::{Color, SetForegroundColor},
+    cursor::MoveTo,
+    style::{Color, Print, SetForegroundColor},
     terminal::{
         disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
-    ExecutableCommand,
+    ExecutableCommand, QueueableCommand,
 };
 use tokio::{
     spawn,
@@ -57,7 +57,7 @@ impl App {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        self.stdout.execute(EnterAlternateScreen)?.execute(Hide)?;
+        self.stdout.execute(EnterAlternateScreen)?;
         enable_raw_mode()?;
 
         let (input_ks_tx, input_ks_rx): (Sender<()>, Receiver<()>) = channel(1);
@@ -84,7 +84,7 @@ impl App {
         tick_ks_tx.send(()).await?;
 
         disable_raw_mode()?;
-        self.stdout.execute(Show)?.execute(LeaveAlternateScreen)?;
+        self.stdout.execute(LeaveAlternateScreen)?;
         println!("Your WPM: {}", wpm.round());
         return Ok(());
     }
@@ -97,7 +97,7 @@ impl App {
             }
             Event::KeyPress(k) => self.handle_keypress(k).await?,
             Event::Backspace => self.handle_backspace().await,
-            Event::Render => self.render().await,
+            Event::Render => self.render().await?,
         }
 
         if event != Event::Render {
@@ -125,23 +125,23 @@ impl App {
         }
     }
 
-    async fn render(&mut self) {
+    async fn render(&mut self) -> Result<(), Box<dyn Error>> {
         if !self.should_render {
-            return;
+            return Ok(());
         }
 
         self.stdout
-            .execute(Clear(ClearType::All))
+            .queue(Clear(ClearType::All))
             .unwrap()
-            .execute(SetForegroundColor(Color::Green))
+            .queue(SetForegroundColor(Color::Green))
             .unwrap()
-            .execute(MoveTo(0, 0))
+            .queue(MoveTo(0, 0))
             .unwrap();
         let done = self.quote[..self.state.current].join(" ");
-        print!("{}", done);
+        self.stdout.queue(Print(&done))?;
 
         if !done.trim().is_empty() {
-            print!(" ");
+            self.stdout.queue(Print(" "))?;
         }
 
         for i in 0..self.state.buffer.len() {
@@ -151,37 +151,33 @@ impl App {
 
             let c = self.quote[self.state.current].chars().nth(i).unwrap();
             if self.state.buffer.chars().nth(i).unwrap() == c {
-                self.stdout
-                    .execute(SetForegroundColor(Color::Green))
-                    .unwrap();
+                self.stdout.queue(SetForegroundColor(Color::Green)).unwrap();
             } else {
-                self.stdout.execute(SetForegroundColor(Color::Red)).unwrap();
+                self.stdout.queue(SetForegroundColor(Color::Red)).unwrap();
             }
-            print!("{}", c);
+            self.stdout.queue(Print(&c))?;
         }
 
         if self.state.buffer.len() < self.quote[self.state.current].len() {
-            self.stdout
-                .execute(SetForegroundColor(Color::Reset))
-                .unwrap();
+            self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
             let v = &self.quote[self.state.current][self.state.buffer.len()..];
-            print!("{}", v);
+            self.stdout.queue(Print(&v))?;
         } else if self.state.buffer.len() > self.quote[self.state.current].len() {
             self.stdout
-                .execute(SetForegroundColor(Color::Yellow))
+                .queue(SetForegroundColor(Color::Yellow))
                 .unwrap();
             let v = &self.state.buffer[self.quote[self.state.current].len()..];
-            print!("{}", v);
+            self.stdout.queue(Print(&v))?;
         }
 
-        print!(" ");
+        self.stdout.queue(Print(" "))?;
 
-        self.stdout
-            .execute(SetForegroundColor(Color::Reset))
-            .unwrap();
+        self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
         let to_do = self.quote[self.state.current + 1..].join(" ");
-        println!("{}", to_do);
+        self.stdout.queue(Print(&to_do))?.queue(Print("\n"))?;
+        self.stdout.flush()?;
         self.should_render = false;
+        return Ok(());
     }
 }
 
