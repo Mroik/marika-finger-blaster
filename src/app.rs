@@ -35,6 +35,7 @@ pub struct App {
     state: State,
     should_render: bool,
     start: Option<Instant>,
+    completed: bool,
 }
 
 impl App {
@@ -53,6 +54,7 @@ impl App {
             state: State::default(),
             should_render: true,
             start: None,
+            completed: false,
         }
     }
 
@@ -85,7 +87,9 @@ impl App {
 
         disable_raw_mode()?;
         self.stdout.execute(LeaveAlternateScreen)?;
-        println!("Your WPM: {}", wpm.round());
+        if self.completed {
+            println!("Your WPM: {}", wpm.round());
+        }
         return Ok(());
     }
 
@@ -111,6 +115,7 @@ impl App {
             self.state.buffer.clear();
             self.state.current += 1;
             if self.state.current == self.quote.len() {
+                self.completed = true;
                 self.running = false;
             }
         } else {
