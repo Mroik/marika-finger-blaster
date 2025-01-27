@@ -5,10 +5,12 @@ use tokio::sync::mpsc::Sender;
 
 use crate::app::TICK_RATE;
 
+#[derive(PartialEq)]
 pub enum Event {
     Terminate,
     KeyPress(char),
     Backspace,
+    Render,
 }
 
 // TODO

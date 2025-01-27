@@ -1,5 +1,6 @@
 mod app;
 pub mod event;
+pub mod state;
 
 use std::{error::Error, fs::read_to_string, path::Path};
 
