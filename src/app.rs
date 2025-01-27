@@ -16,6 +16,7 @@ use crossterm::{
 use tokio::{
     spawn,
     sync::mpsc::{channel, Receiver, Sender},
+    time::Instant,
 };
 
 use crate::{
@@ -33,6 +34,7 @@ pub struct App {
     quote: Vec<String>,
     state: State,
     should_render: bool,
+    start: Option<Instant>,
 }
 
 impl App {
@@ -50,6 +52,7 @@ impl App {
             running: false,
             state: State::default(),
             should_render: true,
+            start: None,
         }
     }
 
@@ -58,26 +61,31 @@ impl App {
         enable_raw_mode()?;
 
         let (input_ks_tx, input_ks_rx): (Sender<()>, Receiver<()>) = channel(1);
-        let ev = self.event_tx.clone();
-        spawn(async {
-            start_input_handler(ev, input_ks_rx).await;
-        });
-
         let (tick_ks_tx, tick_ks_rx): (Sender<()>, Receiver<()>) = channel(1);
-        let ev = self.event_tx.clone();
-        spawn(async {
-            start_tick_generator(ev, tick_ks_rx).await;
-        });
+        spawn(start_input_handler(self.event_tx.clone(), input_ks_rx));
+        spawn(start_tick_generator(self.event_tx.clone(), tick_ks_rx));
 
         self.running = true;
+        self.start = Some(Instant::now());
         while self.running {
             self.process().await?;
         }
+        let time = self.start.unwrap().elapsed().as_millis();
+        let total_chars = self
+            .quote
+            .iter()
+            .map(|w| w.chars().count() as f64)
+            .sum::<f64>()
+            + self.quote.len() as f64
+            - 1.0;
+        let wpm = total_chars / 5.0 * 60000.0 / time as f64;
+
         input_ks_tx.send(()).await?;
         tick_ks_tx.send(()).await?;
 
         disable_raw_mode()?;
         self.stdout.execute(Show)?.execute(LeaveAlternateScreen)?;
+        println!("Your WPM: {}", wpm.round());
         return Ok(());
     }
 
@@ -87,7 +95,7 @@ impl App {
             Event::Terminate => {
                 self.running = false;
             }
-            Event::KeyPress(k) => self.handle_keypress(k).await,
+            Event::KeyPress(k) => self.handle_keypress(k).await?,
             Event::Backspace => self.handle_backspace().await,
             Event::Render => self.render().await,
         }
@@ -98,17 +106,17 @@ impl App {
         return Ok(());
     }
 
-    async fn handle_keypress(&mut self, k: char) {
+    async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
         if self.state.buffer == self.quote[self.state.current] && k == ' ' {
             self.state.buffer.clear();
             self.state.current += 1;
             if self.state.current == self.quote.len() {
-                // TODO Remove running set and set state to StateEnum::Result instead
                 self.running = false;
             }
         } else {
             self.state.buffer.push(k);
         }
+        return Ok(());
     }
 
     async fn handle_backspace(&mut self) {
