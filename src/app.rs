@@ -26,6 +26,22 @@ use crate::{
 
 pub const TICK_RATE: u64 = 1000 / 20;
 
+trait Substringable<'a> {
+    fn substring(&'a self, start: usize, end: usize) -> Option<&'a str>;
+}
+
+impl<'a> Substringable<'a> for str {
+    fn substring(&'a self, start: usize, end: usize) -> Option<&'a str> {
+        let s = self.char_indices().nth(start);
+        let e = self.char_indices().nth(end);
+        match (s, e) {
+            (None, _) => return None,
+            (Some(v), None) => Some(&self[v.0..]),
+            (Some(v1), Some(v2)) => Some(&self[v1.0..v2.0]),
+        }
+    }
+}
+
 pub struct App<'a> {
     stdout: Stdout,
     pub event_tx: Sender<Event>,
@@ -112,15 +128,12 @@ impl<'a> App<'a> {
 
     async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
         self.state.buffer.push(k);
-        let end_offset = self
+        let is_word_completed = self
             .state
             .buffer
-            .char_indices()
-            .take(self.state.buffer.chars().count())
-            .last()
+            .substring(0, self.state.buffer.chars().count() - 1)
             .unwrap()
-            .0;
-        let is_word_completed = self.state.buffer[0..end_offset] == *self.quote[self.state.current];
+            == self.quote[self.state.current];
         let is_text_completed = self.state.buffer == self.quote[self.state.current]
             && self.state.current == self.quote.len() - 1;
 
@@ -184,28 +197,20 @@ impl<'a> App<'a> {
         match (buf_size, cur_word_size) {
             (a, b) if a < b => {
                 self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
-                let start_offset = self.quote[self.state.current]
-                    .char_indices()
-                    .skip(buf_size)
-                    .nth(0)
-                    .unwrap()
-                    .0;
-                let v = &self.quote[self.state.current][start_offset..];
+                let v = &self.quote[self.state.current]
+                    .substring(buf_size, self.quote[self.state.current].chars().count())
+                    .unwrap();
                 self.stdout.queue(Print(v))?;
             }
             (a, b) if a > b => {
                 self.stdout
                     .queue(SetForegroundColor(Color::Yellow))
                     .unwrap();
-                let start_offset = self
+                let v = &self
                     .state
                     .buffer
-                    .char_indices()
-                    .skip(cur_word_size)
-                    .nth(0)
-                    .unwrap()
-                    .0;
-                let v = &self.state.buffer[start_offset..];
+                    .substring(cur_word_size, self.state.buffer.chars().count())
+                    .unwrap();
                 self.stdout.queue(Print(v))?;
             }
             _ => (),
