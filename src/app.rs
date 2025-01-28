@@ -147,6 +147,8 @@ impl App {
             return Ok(());
         }
 
+        let buf_size = self.state.buffer.chars().count();
+        let cur_word_size = self.quote[self.state.current].chars().count();
         let (col, _) = terminal::size()?;
         self.stdout
             .queue(Clear(ClearType::All))
@@ -162,13 +164,13 @@ impl App {
             self.stdout.queue(Print(" "))?;
         }
 
-        let mut cur_loc = done.chars().count() + self.state.buffer.chars().count();
+        let mut cur_loc = done.chars().count() + buf_size;
         if self.state.current > 0 {
             cur_loc += 1;
         }
 
         for i in 0..self.state.buffer.len() {
-            if i >= self.quote[self.state.current].chars().count() {
+            if i >= cur_word_size {
                 break;
             }
 
@@ -181,15 +183,12 @@ impl App {
             self.stdout.queue(Print(&c))?;
         }
 
-        match (
-            self.state.buffer.chars().count(),
-            self.quote[self.state.current].chars().count(),
-        ) {
+        match (buf_size, cur_word_size) {
             (a, b) if a < b => {
                 self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
                 let v = &self.quote[self.state.current]
                     .chars()
-                    .skip(self.state.buffer.chars().count())
+                    .skip(buf_size)
                     .collect::<String>();
                 self.stdout.queue(Print(&v))?;
             }
@@ -201,7 +200,7 @@ impl App {
                     .state
                     .buffer
                     .chars()
-                    .skip(self.quote[self.state.current].chars().count())
+                    .skip(cur_word_size)
                     .collect::<String>();
                 self.stdout.queue(Print(&v))?;
             }
