@@ -116,14 +116,20 @@ impl App {
 
     async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
         self.state.buffer.push(k);
-        if self.state.buffer[..self.state.buffer.len() - 1] == self.quote[self.state.current]
-            && k == ' '
-        {
+        let is_word_completed = self
+            .state
+            .buffer
+            .chars()
+            .take(self.state.buffer.chars().count() - 1)
+            .collect::<String>()
+            == self.quote[self.state.current];
+        let is_text_completed = self.state.buffer == self.quote[self.state.current]
+            && self.state.current == self.quote.len() - 1;
+
+        if is_word_completed && k == ' ' {
             self.state.buffer.clear();
             self.state.current += 1;
-        } else if self.state.buffer == self.quote[self.state.current]
-            && self.state.current == self.quote.len() - 1
-        {
+        } else if is_text_completed {
             self.running = false;
             self.completed = true;
         }
@@ -156,13 +162,13 @@ impl App {
             self.stdout.queue(Print(" "))?;
         }
 
-        let mut cur_loc = done.chars().count() + self.state.buffer.len();
-        if cur_loc > 0 {
+        let mut cur_loc = done.chars().count() + self.state.buffer.chars().count();
+        if self.state.current > 0 {
             cur_loc += 1;
         }
 
         for i in 0..self.state.buffer.len() {
-            if i >= self.quote[self.state.current].len() {
+            if i >= self.quote[self.state.current].chars().count() {
                 break;
             }
 
@@ -175,16 +181,31 @@ impl App {
             self.stdout.queue(Print(&c))?;
         }
 
-        if self.state.buffer.len() < self.quote[self.state.current].len() {
-            self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
-            let v = &self.quote[self.state.current][self.state.buffer.len()..];
-            self.stdout.queue(Print(&v))?;
-        } else if self.state.buffer.len() > self.quote[self.state.current].len() {
-            self.stdout
-                .queue(SetForegroundColor(Color::Yellow))
-                .unwrap();
-            let v = &self.state.buffer[self.quote[self.state.current].len()..];
-            self.stdout.queue(Print(&v))?;
+        match (
+            self.state.buffer.chars().count(),
+            self.quote[self.state.current].chars().count(),
+        ) {
+            (a, b) if a < b => {
+                self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
+                let v = &self.quote[self.state.current]
+                    .chars()
+                    .skip(self.state.buffer.chars().count())
+                    .collect::<String>();
+                self.stdout.queue(Print(&v))?;
+            }
+            (a, b) if a > b => {
+                self.stdout
+                    .queue(SetForegroundColor(Color::Yellow))
+                    .unwrap();
+                let v = &self
+                    .state
+                    .buffer
+                    .chars()
+                    .skip(self.quote[self.state.current].chars().count())
+                    .collect::<String>();
+                self.stdout.queue(Print(&v))?;
+            }
+            _ => (),
         }
 
         self.stdout.queue(Print(" "))?;

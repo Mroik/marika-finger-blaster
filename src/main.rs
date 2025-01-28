@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 mod app;
 pub mod event;
 pub mod state;
@@ -36,7 +38,7 @@ fn generate_quotes(path: &Path) -> Result<Vec<String>, Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let path = Path::new(&args.quote);
-    let mut quotes = generate_quotes(&path).unwrap();
+    let mut quotes = generate_quotes(path).unwrap();
     let mut rng = thread_rng();
     let chosen = rng.gen_range(0..quotes.len());
     let quote = quotes.remove(chosen);
