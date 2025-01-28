@@ -26,28 +26,24 @@ use crate::{
 
 pub const TICK_RATE: u64 = 1000 / 20;
 
-pub struct App {
+pub struct App<'a> {
     stdout: Stdout,
     pub event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
     running: bool,
-    quote: Vec<String>,
+    quote: Vec<&'a str>,
     state: State,
     should_render: bool,
     start: Option<Instant>,
     completed: bool,
 }
 
-impl App {
-    pub fn new(quote: String) -> App {
+impl<'a> App<'a> {
+    pub fn new(quote: &str) -> App {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
         App {
             stdout: stdout(),
-            quote: quote
-                .split_whitespace()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect(),
+            quote: quote.split_whitespace().filter(|s| !s.is_empty()).collect(),
             event_rx,
             event_tx,
             running: false,
@@ -116,13 +112,15 @@ impl App {
 
     async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
         self.state.buffer.push(k);
-        let is_word_completed = self
+        let end_offset = self
             .state
             .buffer
-            .chars()
-            .take(self.state.buffer.chars().count() - 1)
-            .collect::<String>()
-            == self.quote[self.state.current];
+            .char_indices()
+            .take(self.state.buffer.chars().count())
+            .last()
+            .unwrap()
+            .0;
+        let is_word_completed = self.state.buffer[0..end_offset] == *self.quote[self.state.current];
         let is_text_completed = self.state.buffer == self.quote[self.state.current]
             && self.state.current == self.quote.len() - 1;
 
@@ -169,7 +167,7 @@ impl App {
             cur_loc += 1;
         }
 
-        for i in 0..self.state.buffer.len() {
+        for i in 0..self.state.buffer.chars().count() {
             if i >= cur_word_size {
                 break;
             }
@@ -186,23 +184,29 @@ impl App {
         match (buf_size, cur_word_size) {
             (a, b) if a < b => {
                 self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
-                let v = &self.quote[self.state.current]
-                    .chars()
+                let start_offset = self.quote[self.state.current]
+                    .char_indices()
                     .skip(buf_size)
-                    .collect::<String>();
-                self.stdout.queue(Print(&v))?;
+                    .nth(0)
+                    .unwrap()
+                    .0;
+                let v = &self.quote[self.state.current][start_offset..];
+                self.stdout.queue(Print(v))?;
             }
             (a, b) if a > b => {
                 self.stdout
                     .queue(SetForegroundColor(Color::Yellow))
                     .unwrap();
-                let v = &self
+                let start_offset = self
                     .state
                     .buffer
-                    .chars()
+                    .char_indices()
                     .skip(cur_word_size)
-                    .collect::<String>();
-                self.stdout.queue(Print(&v))?;
+                    .nth(0)
+                    .unwrap()
+                    .0;
+                let v = &self.state.buffer[start_offset..];
+                self.stdout.queue(Print(v))?;
             }
             _ => (),
         }
