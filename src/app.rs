@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     error::Error,
-    fmt::Display,
     io::{stdout, Stdout, Write},
     time::Duration,
 };
@@ -22,6 +21,7 @@ use tokio::{
 };
 
 use crate::{
+    error::WordTooLongError,
     event::{handle_input, Event},
     state::State,
 };
@@ -30,28 +30,6 @@ pub const TICK_RATE: u64 = 1000 / 20;
 const MIN_TERM_COL: u16 = 65;
 const MIN_TERM_ROW: u16 = 15;
 const MAX_QUOTE_LINE: u16 = 80;
-
-#[derive(Debug)]
-struct WordTooLongError {
-    word: String,
-}
-
-impl WordTooLongError {
-    fn new(word: impl Into<String>) -> WordTooLongError {
-        WordTooLongError { word: word.into() }
-    }
-}
-
-impl Display for WordTooLongError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "The word \"{}\" is too long for the current terminal size",
-            self.word
-        ))
-    }
-}
-
-impl Error for WordTooLongError {}
 
 trait Substringable<'a> {
     fn substring(&'a self, start: usize, end: usize) -> Option<&'a str>;
@@ -74,7 +52,6 @@ pub struct App<'a> {
     pub event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
     running: bool,
-    raw_quote: &'a str,
     quote: Vec<&'a str>,
     state: State,
     should_render: bool,
@@ -85,12 +62,10 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
-    // TODO Format quote
     pub fn new(quote: &str) -> App {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
         App {
             stdout: stdout(),
-            raw_quote: quote,
             quote: quote.split_whitespace().filter(|s| !s.is_empty()).collect(),
             event_rx,
             event_tx,
@@ -217,7 +192,6 @@ impl App<'_> {
         return a.join(" ");
     }
 
-    // TODO Reformat quote on ForceRender
     async fn process(&mut self) -> Result<(), Box<dyn Error>> {
         let event = self.event_rx.recv().await.unwrap();
         match event {
@@ -286,6 +260,7 @@ impl App<'_> {
         }
     }
 
+    // TODO Reformat quote
     async fn render(&mut self) -> Result<(), Box<dyn Error>> {
         if !self.should_render {
             return Ok(());

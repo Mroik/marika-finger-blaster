@@ -1,6 +1,7 @@
 #![allow(clippy::needless_return)]
 
 mod app;
+pub mod error;
 pub mod event;
 pub mod state;
 
