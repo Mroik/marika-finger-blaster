@@ -54,7 +54,7 @@ pub struct App<'a> {
     completed: bool,
 }
 
-impl<'a> App<'a> {
+impl App<'_> {
     pub fn new(quote: &str) -> App {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
         App {
@@ -158,8 +158,11 @@ impl<'a> App<'a> {
             return Ok(());
         }
 
-        let buf_size = self.state.buffer.chars().count();
-        let cur_word_size = self.quote[self.state.current].chars().count();
+        let buf = &self.state.buffer;
+        let cur_word = self.quote[self.state.current];
+
+        let buf_size = buf.chars().count();
+        let cur_word_size = cur_word.chars().count();
         let (col, _) = terminal::size()?;
         self.stdout
             .queue(Clear(ClearType::All))
@@ -180,13 +183,13 @@ impl<'a> App<'a> {
             cur_loc += 1;
         }
 
-        for i in 0..self.state.buffer.chars().count() {
+        for i in 0..buf.chars().count() {
             if i >= cur_word_size {
                 break;
             }
 
-            let c = self.quote[self.state.current].chars().nth(i).unwrap();
-            if self.state.buffer.chars().nth(i).unwrap() == c {
+            let c = cur_word.chars().nth(i).unwrap();
+            if buf.chars().nth(i).unwrap() == c {
                 self.stdout.queue(SetForegroundColor(Color::Green)).unwrap();
             } else {
                 self.stdout.queue(SetForegroundColor(Color::Red)).unwrap();
@@ -197,8 +200,8 @@ impl<'a> App<'a> {
         match (buf_size, cur_word_size) {
             (a, b) if a < b => {
                 self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
-                let v = &self.quote[self.state.current]
-                    .substring(buf_size, self.quote[self.state.current].chars().count())
+                let v = &cur_word
+                    .substring(buf_size, cur_word.chars().count())
                     .unwrap();
                 self.stdout.queue(Print(v))?;
             }
@@ -206,11 +209,7 @@ impl<'a> App<'a> {
                 self.stdout
                     .queue(SetForegroundColor(Color::Yellow))
                     .unwrap();
-                let v = &self
-                    .state
-                    .buffer
-                    .substring(cur_word_size, self.state.buffer.chars().count())
-                    .unwrap();
+                let v = buf.substring(cur_word_size, buf.chars().count()).unwrap();
                 self.stdout.queue(Print(v))?;
             }
             _ => (),
