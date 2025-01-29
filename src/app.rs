@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     error::Error,
+    fmt::Display,
     io::{stdout, Stdout, Write},
     time::Duration,
 };
@@ -28,6 +29,29 @@ use crate::{
 pub const TICK_RATE: u64 = 1000 / 20;
 const MIN_TERM_COL: u16 = 65;
 const MIN_TERM_ROW: u16 = 15;
+const MAX_QUOTE_LINE: u16 = 80;
+
+#[derive(Debug)]
+struct WordTooLongError {
+    word: String,
+}
+
+impl WordTooLongError {
+    fn new(word: impl Into<String>) -> WordTooLongError {
+        WordTooLongError { word: word.into() }
+    }
+}
+
+impl Display for WordTooLongError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "The word \"{}\" is too long for the current terminal size",
+            self.word
+        ))
+    }
+}
+
+impl Error for WordTooLongError {}
 
 trait Substringable<'a> {
     fn substring(&'a self, start: usize, end: usize) -> Option<&'a str>;
@@ -50,6 +74,7 @@ pub struct App<'a> {
     pub event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
     running: bool,
+    raw_quote: &'a str,
     quote: Vec<&'a str>,
     state: State,
     should_render: bool,
@@ -60,10 +85,12 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
+    // TODO Format quote
     pub fn new(quote: &str) -> App {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
         App {
             stdout: stdout(),
+            raw_quote: quote,
             quote: quote.split_whitespace().filter(|s| !s.is_empty()).collect(),
             event_rx,
             event_tx,
@@ -75,6 +102,35 @@ impl App<'_> {
             mistake_count: 0,
             mistakes: HashSet::new(),
         }
+    }
+
+    async fn format_quote(quote: &str, row_len: u16) -> Result<Vec<Vec<&str>>, Box<dyn Error>> {
+        let max = if row_len - 20 > MAX_QUOTE_LINE {
+            row_len - 20
+        } else {
+            MAX_QUOTE_LINE
+        };
+        let mut counter = 0;
+        let mut lines = Vec::new();
+        let mut line = Vec::new();
+        for w in quote.split_whitespace().filter(|s| !s.is_empty()) {
+            let w_len = w.chars().count();
+            if w_len > max as usize {
+                return Err(Box::new(WordTooLongError::new(w)));
+            }
+
+            if w_len + counter > max as usize {
+                lines.push(line);
+                line = Vec::new();
+                line.push(w);
+                counter = w_len + 1;
+            } else {
+                line.push(w);
+                counter += w_len + 1;
+            }
+        }
+        lines.push(line);
+        return Ok(lines);
     }
 
     async fn run(&mut self) -> Result<(f64, f64, String), Box<dyn Error>> {
@@ -161,6 +217,7 @@ impl App<'_> {
         return a.join(" ");
     }
 
+    // TODO Reformat quote on ForceRender
     async fn process(&mut self) -> Result<(), Box<dyn Error>> {
         let event = self.event_rx.recv().await.unwrap();
         match event {
