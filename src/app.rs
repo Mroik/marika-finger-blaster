@@ -52,6 +52,7 @@ pub struct App<'a> {
     should_render: bool,
     start: Option<Instant>,
     completed: bool,
+    mistakes: u32,
 }
 
 impl App<'_> {
@@ -67,6 +68,7 @@ impl App<'_> {
             should_render: true,
             start: None,
             completed: false,
+            mistakes: 0,
         }
     }
 
@@ -93,6 +95,7 @@ impl App<'_> {
             + self.quote.len() as f64
             - 1.0;
         let wpm = total_chars / 5.0 * 60000.0 / time as f64;
+        let accuracy = total_chars * 100.0 / (total_chars + self.mistakes as f64);
 
         input_ks_tx.send(()).await?;
         tick_ks_tx.send(()).await?;
@@ -100,7 +103,12 @@ impl App<'_> {
         disable_raw_mode()?;
         self.stdout.execute(LeaveAlternateScreen)?;
         if self.completed {
-            println!("Your WPM: {}", wpm.round());
+            println!(
+                "Your stats\nWPM: {}\nAccuracy: {}\nMistakes: {}",
+                wpm.round(),
+                accuracy,
+                self.mistakes
+            );
         }
         return Ok(());
     }
@@ -136,6 +144,10 @@ impl App<'_> {
             == self.quote[self.state.current];
         let is_text_completed = self.state.buffer == self.quote[self.state.current]
             && self.state.current == self.quote.len() - 1;
+        let is_correct = self.state.buffer.chars().count()
+            <= self.quote[self.state.current].chars().count()
+            && self.state.buffer.chars().last().unwrap()
+                == self.quote[self.state.current].chars().last().unwrap();
 
         if is_word_completed && k == ' ' {
             self.state.buffer.clear();
@@ -143,7 +155,10 @@ impl App<'_> {
         } else if is_text_completed {
             self.running = false;
             self.completed = true;
+        } else if !is_correct {
+            self.mistakes += 1;
         }
+
         return Ok(());
     }
 
