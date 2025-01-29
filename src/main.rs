@@ -47,6 +47,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // TODO Add more options to choose quotes
     let mut app = App::new(&quote);
 
-    app.run().await?;
+    app.start().await?;
     return Ok(());
 }

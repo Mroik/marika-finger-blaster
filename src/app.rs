@@ -6,10 +6,10 @@ use std::{
 };
 
 use crossterm::{
-    cursor::MoveTo,
+    cursor::{MoveTo, SetCursorStyle},
     style::{Color, Print, SetForegroundColor},
     terminal::{
-        self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        self, disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
     ExecutableCommand, QueueableCommand,
@@ -26,6 +26,8 @@ use crate::{
 };
 
 pub const TICK_RATE: u64 = 1000 / 20;
+const MIN_TERM_COL: u16 = 65;
+const MIN_TERM_ROW: u16 = 15;
 
 trait Substringable<'a> {
     fn substring(&'a self, start: usize, end: usize) -> Option<&'a str>;
@@ -75,8 +77,10 @@ impl App<'_> {
         }
     }
 
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        self.stdout.execute(EnterAlternateScreen)?;
+    async fn run(&mut self) -> Result<(f64, f64, String), Box<dyn Error>> {
+        self.stdout
+            .execute(EnterAlternateScreen)?
+            .execute(SetCursorStyle::SteadyBar)?;
         enable_raw_mode()?;
 
         let (input_ks_tx, input_ks_rx): (Sender<()>, Receiver<()>) = channel(1);
@@ -106,6 +110,17 @@ impl App<'_> {
 
         disable_raw_mode()?;
         self.stdout.execute(LeaveAlternateScreen)?;
+        return Ok((wpm, accuracy, history));
+    }
+
+    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+        let (col, row) = size()?;
+        if col < MIN_TERM_COL || row < MIN_TERM_ROW {
+            println!("Terminal is too small! Minimum size is 65 columns and 15 rows");
+            return Ok(());
+        }
+
+        let (wpm, accuracy, history) = self.run().await?;
         if self.completed {
             println!(
                 "Mistake history:\n{}\n\nYour stats\nWPM: {}\nAccuracy: {}\nMistakes: {}",
@@ -156,12 +171,17 @@ impl App<'_> {
             Event::Backspace => self.handle_backspace().await,
             Event::Render => self.render().await?,
             Event::ForceRender => {
+                let (col, row) = size()?;
+                if col < MIN_TERM_COL || row < MIN_TERM_ROW {
+                    self.running = false;
+                    return Ok(());
+                }
                 self.should_render = true;
                 self.render().await?;
             }
         }
 
-        if event != Event::Render {
+        if event != Event::Render && event != Event::ForceRender {
             self.should_render = true;
         }
         return Ok(());
