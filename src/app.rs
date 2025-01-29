@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     error::Error,
     io::{stdout, Stdout, Write},
     time::Duration,
@@ -52,7 +53,8 @@ pub struct App<'a> {
     should_render: bool,
     start: Option<Instant>,
     completed: bool,
-    mistakes: u32,
+    mistake_count: u32,
+    mistakes: HashSet<(usize, usize)>,
 }
 
 impl App<'_> {
@@ -68,7 +70,8 @@ impl App<'_> {
             should_render: true,
             start: None,
             completed: false,
-            mistakes: 0,
+            mistake_count: 0,
+            mistakes: HashSet::new(),
         }
     }
 
@@ -95,7 +98,8 @@ impl App<'_> {
             + self.quote.len() as f64
             - 1.0;
         let wpm = total_chars / 5.0 * 60000.0 / time as f64;
-        let accuracy = total_chars * 100.0 / (total_chars + self.mistakes as f64);
+        let accuracy = total_chars * 100.0 / (total_chars + self.mistake_count as f64);
+        let history = self.generate_mistake_locations().await;
 
         input_ks_tx.send(()).await?;
         tick_ks_tx.send(()).await?;
@@ -104,13 +108,42 @@ impl App<'_> {
         self.stdout.execute(LeaveAlternateScreen)?;
         if self.completed {
             println!(
-                "Your stats\nWPM: {}\nAccuracy: {}\nMistakes: {}",
+                "Mistake history:\n{}\n\nYour stats\nWPM: {}\nAccuracy: {}\nMistakes: {}",
+                history,
                 wpm.round(),
-                accuracy,
-                self.mistakes
+                accuracy.round(),
+                self.mistake_count
             );
         }
         return Ok(());
+    }
+
+    async fn generate_mistake_locations(&self) -> String {
+        let mut miss: Vec<(usize, usize)> = self.mistakes.iter().copied().collect();
+        miss.sort();
+        miss.reverse();
+
+        let a: Vec<String> = self
+            .quote
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                let mut ris = String::new();
+                for (j, c) in w.chars().enumerate() {
+                    match miss.last() {
+                        Some((a, b)) if *a == i && *b == j => {
+                            ris.push_str("\x1b[31m");
+                            ris.push(c);
+                            ris.push_str("\x1b[0m");
+                            miss.pop();
+                        }
+                        _ => ris.push(c),
+                    }
+                }
+                ris
+            })
+            .collect();
+        return a.join(" ");
     }
 
     async fn process(&mut self) -> Result<(), Box<dyn Error>> {
@@ -147,7 +180,11 @@ impl App<'_> {
         let is_correct = self.state.buffer.chars().count()
             <= self.quote[self.state.current].chars().count()
             && self.state.buffer.chars().last().unwrap()
-                == self.quote[self.state.current].chars().last().unwrap();
+                == self.quote[self.state.current]
+                    .chars()
+                    .nth(self.state.buffer.chars().count() - 1)
+                    .unwrap();
+        let miss_word = self.state.current;
 
         if is_word_completed && k == ' ' {
             self.state.buffer.clear();
@@ -156,7 +193,11 @@ impl App<'_> {
             self.running = false;
             self.completed = true;
         } else if !is_correct {
-            self.mistakes += 1;
+            self.mistake_count += 1;
+            if self.state.buffer.chars().count() <= self.quote[miss_word].chars().count() {
+                self.mistakes
+                    .insert((miss_word, self.state.buffer.chars().count() - 1));
+            }
         }
 
         return Ok(());
