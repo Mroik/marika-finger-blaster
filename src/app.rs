@@ -77,7 +77,7 @@ impl App<'_> {
         let mut counter = 0;
         let mut lines = Vec::new();
         let mut line = Vec::new();
-        for w in quote.trim().split_whitespace().filter(|s| !s.is_empty()) {
+        for w in quote.split_whitespace().filter(|s| !s.is_empty()) {
             let w_len = w.chars().count();
             if w_len > max as usize {
                 return Err(WordTooLongError::new(w));
@@ -322,21 +322,25 @@ impl App<'_> {
             }
             self.stdout.queue(SavePosition)?;
 
-            if cc.len() < vv.len() {
-                self.stdout.queue(SetForegroundColor(Color::Yellow))?;
-                let remaining = vv.iter().skip(cc.len()).fold(String::new(), |mut a, b| {
-                    a.push(*b);
-                    a
-                });
-                self.stdout.queue(Print(remaining))?;
-                self.stdout.queue(SavePosition)?;
-            } else if cc.len() > vv.len() {
-                self.stdout.queue(SetForegroundColor(Color::Reset))?;
-                let remaining = cc.iter().skip(vv.len()).fold(String::new(), |mut a, b| {
-                    a.push(*b);
-                    a
-                });
-                self.stdout.queue(Print(remaining))?;
+            match (cc.len(), vv.len()) {
+                (ccc, vvv) if ccc < vvv => {
+                    self.stdout.queue(SetForegroundColor(Color::Yellow))?;
+                    let remaining = vv.iter().skip(cc.len()).fold(String::new(), |mut a, b| {
+                        a.push(*b);
+                        a
+                    });
+                    self.stdout.queue(Print(remaining))?;
+                    self.stdout.queue(SavePosition)?;
+                }
+                (ccc, vvv) if ccc > vvv => {
+                    self.stdout.queue(SetForegroundColor(Color::Reset))?;
+                    let remaining = cc.iter().skip(vv.len()).fold(String::new(), |mut a, b| {
+                        a.push(*b);
+                        a
+                    });
+                    self.stdout.queue(Print(remaining))?;
+                }
+                (_, _) => (),
             }
             self.stdout.queue(Print(' '))?;
         }
