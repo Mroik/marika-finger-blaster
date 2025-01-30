@@ -1,21 +1,28 @@
 use std::{error::Error, fmt::Display};
 
+use crate::app::{MIN_TERM_COL, MIN_TERM_ROW};
+
 #[derive(Debug, Clone)]
 pub struct WordTooLongError {
     word: String,
+    max_length: u16,
 }
 
 impl WordTooLongError {
-    pub fn new(word: impl Into<String>) -> WordTooLongError {
-        WordTooLongError { word: word.into() }
+    pub fn new(word: impl Into<String>, max_length: u16) -> WordTooLongError {
+        WordTooLongError {
+            word: word.into(),
+            max_length,
+        }
     }
 }
 
 impl Display for WordTooLongError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
-            "The word \"{}\" is too long for the current terminal size or longer than 80 characters.",
-            self.word
+            "The word \"{}\" is too long for the current terminal size or longer than {} characters.",
+            self.word,
+            self.max_length,
         ))
     }
 }
@@ -27,9 +34,10 @@ pub struct TerminalTooSmallError;
 
 impl Display for TerminalTooSmallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            "The terminal size is too small. Min column count is 65 and minimum row count is 15.",
-        )
+        f.write_fmt(format_args!(
+            "The terminal size is too small. Min column count is {} and minimum row count is {}.",
+            MIN_TERM_COL, MIN_TERM_ROW
+        ))
     }
 }
 

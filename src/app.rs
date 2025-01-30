@@ -27,8 +27,8 @@ use crate::{
 };
 
 pub const TICK_RATE: u64 = 1000 / 20;
-const MIN_TERM_COL: u16 = 40;
-const MIN_TERM_ROW: u16 = 10;
+pub const MIN_TERM_COL: u16 = 40;
+pub const MIN_TERM_ROW: u16 = 10;
 const MAX_QUOTE_LINE: u16 = 80;
 const MIN_MARGIN: u16 = 4;
 
@@ -80,7 +80,7 @@ impl App<'_> {
         for w in quote.split_whitespace().filter(|s| !s.is_empty()) {
             let w_len = w.chars().count();
             if w_len > max as usize {
-                return Err(WordTooLongError::new(w));
+                return Err(WordTooLongError::new(w, max));
             }
 
             if w_len + counter > max as usize {
