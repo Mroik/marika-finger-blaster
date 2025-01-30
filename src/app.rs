@@ -6,10 +6,10 @@ use std::{
 };
 
 use crossterm::{
-    cursor::{MoveTo, SetCursorStyle},
+    cursor::{MoveDown, MoveTo, MoveToColumn, RestorePosition, SavePosition, SetCursorStyle},
     style::{Color, Print, SetForegroundColor},
     terminal::{
-        self, disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
+        disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
     ExecutableCommand, QueueableCommand,
@@ -30,6 +30,7 @@ pub const TICK_RATE: u64 = 1000 / 20;
 const MIN_TERM_COL: u16 = 65;
 const MIN_TERM_ROW: u16 = 15;
 const MAX_QUOTE_LINE: u16 = 80;
+const MIN_MARGIN: u16 = 10;
 
 trait Substringable<'a> {
     fn substring(&'a self, start: usize, end: usize) -> Option<&'a str>;
@@ -59,6 +60,7 @@ pub struct App<'a> {
     completed: bool,
     mistake_count: u32,
     mistakes: HashSet<(usize, usize)>,
+    raw_quote: &'a str,
 }
 
 impl App<'_> {
@@ -67,6 +69,7 @@ impl App<'_> {
         App {
             stdout: stdout(),
             quote: quote.split_whitespace().filter(|s| !s.is_empty()).collect(),
+            raw_quote: quote,
             event_rx,
             event_tx,
             running: false,
@@ -80,15 +83,15 @@ impl App<'_> {
     }
 
     async fn format_quote(quote: &str, row_len: u16) -> Result<Vec<Vec<&str>>, Box<dyn Error>> {
-        let max = if row_len - 20 > MAX_QUOTE_LINE {
-            row_len - 20
+        let max = if row_len - (MIN_MARGIN * 2) < MAX_QUOTE_LINE {
+            row_len - (MIN_MARGIN * 2)
         } else {
             MAX_QUOTE_LINE
         };
         let mut counter = 0;
         let mut lines = Vec::new();
         let mut line = Vec::new();
-        for w in quote.split_whitespace().filter(|s| !s.is_empty()) {
+        for w in quote.trim().split_whitespace().filter(|s| !s.is_empty()) {
             let w_len = w.chars().count();
             if w_len > max as usize {
                 return Err(Box::new(WordTooLongError::new(w)));
@@ -260,77 +263,116 @@ impl App<'_> {
         }
     }
 
-    // TODO Reformat quote
     async fn render(&mut self) -> Result<(), Box<dyn Error>> {
         if !self.should_render {
             return Ok(());
         }
 
-        let buf = &self.state.buffer;
-        let cur_word = self.quote[self.state.current];
+        let (cols, rows) = size()?;
+        let lines = App::format_quote(self.raw_quote, cols).await?;
+        let margin =
+            (cols - lines.iter().map(|line| line.join(" ").len()).max().unwrap() as u16) / 2;
+        let current_line = lines
+            .iter()
+            .enumerate()
+            .map(|(i, line)| {
+                (
+                    i,
+                    line.len() + lines.iter().take(i).fold(0, |a, b| a + b.len()),
+                )
+            })
+            .filter(|(_, cumul_len)| self.state.current < *cumul_len)
+            .nth(0)
+            .unwrap()
+            .0;
 
-        let buf_size = buf.chars().count();
-        let cur_word_size = cur_word.chars().count();
-        let (col, _) = terminal::size()?;
         self.stdout
             .queue(Clear(ClearType::All))
             .unwrap()
-            .queue(SetForegroundColor(Color::Green))
-            .unwrap()
-            .queue(MoveTo(0, 0))
+            .queue(MoveTo(margin, (rows - 3) / 2 - 2))
             .unwrap();
-        let done = self.quote[..self.state.current].join(" ");
-        self.stdout.queue(Print(&done))?;
 
-        if done.chars().count() > 0 {
-            self.stdout.queue(Print(" "))?;
+        // Prev line
+        if current_line > 0 {
+            self.stdout
+                .queue(SetForegroundColor(Color::Green))?
+                .queue(Print(lines[current_line - 1].join(" ")))?
+                .queue(MoveDown(1))?
+                .queue(MoveToColumn(margin))?;
         }
 
-        let mut cur_loc = done.chars().count() + buf_size;
-        if self.state.current > 0 {
-            cur_loc += 1;
-        }
-
-        for i in 0..buf.chars().count() {
-            if i >= cur_word_size {
-                break;
-            }
-
-            let c = cur_word.chars().nth(i).unwrap();
-            if buf.chars().nth(i).unwrap() == c {
-                self.stdout.queue(SetForegroundColor(Color::Green)).unwrap();
-            } else {
-                self.stdout.queue(SetForegroundColor(Color::Red)).unwrap();
-            }
-            self.stdout.queue(Print(&c))?;
-        }
-
-        match (buf_size, cur_word_size) {
-            (a, b) if a < b => {
-                self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
-                let v = &cur_word
-                    .substring(buf_size, cur_word.chars().count())
-                    .unwrap();
-                self.stdout.queue(Print(v))?;
-            }
-            (a, b) if a > b => {
+        // Cur line
+        let offset = lines[..current_line]
+            .iter()
+            .map(|line| line.len())
+            .sum::<usize>();
+        for i in 0..lines[current_line].len() {
+            if i + offset < self.state.current {
                 self.stdout
-                    .queue(SetForegroundColor(Color::Yellow))
-                    .unwrap();
-                let v = buf.substring(cur_word_size, buf.chars().count()).unwrap();
-                self.stdout.queue(Print(v))?;
+                    .queue(SetForegroundColor(Color::Green))?
+                    .queue(Print(lines[current_line][i]))?
+                    .queue(Print(' '))?;
+                continue;
             }
-            _ => (),
+
+            if i + offset > self.state.current {
+                self.stdout
+                    .queue(SetForegroundColor(Color::Reset))?
+                    .queue(Print(lines[current_line][i]))?
+                    .queue(Print(' '))?;
+                continue;
+            }
+
+            let cc: Vec<char> = lines[current_line][i].chars().collect();
+            let vv: Vec<char> = self.state.buffer.chars().collect();
+            for j in 0..lines[current_line][i].chars().count() {
+                if self.state.buffer.chars().count() <= j {
+                    break;
+                }
+
+                if cc[j] == vv[j] {
+                    self.stdout.queue(SetForegroundColor(Color::Green))?;
+                } else {
+                    self.stdout.queue(SetForegroundColor(Color::Red))?;
+                }
+                self.stdout.queue(Print(cc[j]))?;
+            }
+            self.stdout.queue(SavePosition)?;
+
+            if cc.len() < vv.len() {
+                self.stdout.queue(SetForegroundColor(Color::Yellow))?;
+                let remaining = vv.iter().skip(cc.len()).fold(String::new(), |mut a, b| {
+                    a.push(*b);
+                    a
+                });
+                self.stdout.queue(Print(remaining))?;
+                self.stdout.queue(SavePosition)?;
+            } else if cc.len() > vv.len() {
+                self.stdout.queue(SetForegroundColor(Color::Reset))?;
+                let remaining = cc.iter().skip(vv.len()).fold(String::new(), |mut a, b| {
+                    a.push(*b);
+                    a
+                });
+                self.stdout.queue(Print(remaining))?;
+            }
+            self.stdout.queue(Print(' '))?;
         }
-
-        self.stdout.queue(Print(" "))?;
-
-        self.stdout.queue(SetForegroundColor(Color::Reset)).unwrap();
-        let to_do = self.quote[self.state.current + 1..].join(" ");
-        self.stdout.queue(Print(&to_do))?.queue(Print("\n"))?;
-
         self.stdout
-            .queue(MoveTo(cur_loc as u16 % col, cur_loc as u16 / col))?;
+            .queue(MoveDown(1))?
+            .queue(MoveToColumn(margin))?;
+
+        // Next line
+        if current_line < lines.len() - 1 {
+            let last_rendered = if current_line == 0 { 2 } else { 1 };
+            for line in &lines[current_line + 1..current_line + 1 + last_rendered] {
+                self.stdout
+                    .queue(SetForegroundColor(Color::Reset))?
+                    .queue(Print(line.join(" ")))?
+                    .queue(MoveDown(1))?
+                    .queue(MoveToColumn(margin))?;
+            }
+        }
+        self.stdout.queue(RestorePosition)?;
 
         self.stdout.flush()?;
         self.should_render = false;
