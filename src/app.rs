@@ -32,22 +32,6 @@ const MIN_TERM_ROW: u16 = 15;
 const MAX_QUOTE_LINE: u16 = 80;
 const MIN_MARGIN: u16 = 10;
 
-trait Substringable<'a> {
-    fn substring(&'a self, start: usize, end: usize) -> Option<&'a str>;
-}
-
-impl<'a> Substringable<'a> for str {
-    fn substring(&'a self, start: usize, end: usize) -> Option<&'a str> {
-        let s = self.char_indices().nth(start);
-        let e = self.char_indices().nth(end);
-        match (s, e) {
-            (None, _) => return None,
-            (Some(v), None) => Some(&self[v.0..]),
-            (Some(v1), Some(v2)) => Some(&self[v1.0..v2.0]),
-        }
-    }
-}
-
 pub struct App<'a> {
     stdout: Stdout,
     pub event_tx: Sender<Event>,
@@ -223,12 +207,8 @@ impl App<'_> {
 
     async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
         self.state.buffer.push(k);
-        let is_word_completed = self
-            .state
-            .buffer
-            .substring(0, self.state.buffer.chars().count() - 1)
-            .unwrap()
-            == self.quote[self.state.current];
+        let last_byte = self.state.buffer.char_indices().last().unwrap().0;
+        let is_word_completed = self.state.buffer[..last_byte] == *self.quote[self.state.current];
         let is_text_completed = self.state.buffer == self.quote[self.state.current]
             && self.state.current == self.quote.len() - 1;
         let is_correct = self.state.buffer.chars().count()
