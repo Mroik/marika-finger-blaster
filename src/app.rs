@@ -21,7 +21,7 @@ use tokio::{
 };
 
 use crate::{
-    error::WordTooLongError,
+    error::{TerminalTooSmallError, TyperError, WordTooLongError},
     event::{handle_input, Event},
     state::State,
 };
@@ -45,6 +45,7 @@ pub struct App<'a> {
     mistake_count: u32,
     mistakes: HashSet<(usize, usize)>,
     raw_quote: &'a str,
+    error: Option<TyperError>,
 }
 
 impl App<'_> {
@@ -63,10 +64,11 @@ impl App<'_> {
             completed: false,
             mistake_count: 0,
             mistakes: HashSet::new(),
+            error: None,
         }
     }
 
-    async fn format_quote(quote: &str, row_len: u16) -> Result<Vec<Vec<&str>>, Box<dyn Error>> {
+    async fn format_quote(quote: &str, row_len: u16) -> Result<Vec<Vec<&str>>, WordTooLongError> {
         let max = if row_len - (MIN_MARGIN * 2) < MAX_QUOTE_LINE {
             row_len - (MIN_MARGIN * 2)
         } else {
@@ -78,7 +80,7 @@ impl App<'_> {
         for w in quote.trim().split_whitespace().filter(|s| !s.is_empty()) {
             let w_len = w.chars().count();
             if w_len > max as usize {
-                return Err(Box::new(WordTooLongError::new(w)));
+                return Err(WordTooLongError::new(w));
             }
 
             if w_len + counter > max as usize {
@@ -132,21 +134,18 @@ impl App<'_> {
     }
 
     pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
-        let (col, row) = size()?;
-        if col < MIN_TERM_COL || row < MIN_TERM_ROW {
-            println!("Terminal is too small! Minimum size is 65 columns and 15 rows");
-            return Ok(());
-        }
-
         let (wpm, accuracy, history) = self.run().await?;
         if self.completed {
             println!(
-                "Mistake history:\n{}\n\nYour stats\nWPM: {}\nAccuracy: {}\nMistakes: {}",
+                "Mistake history:\n{}\n\nYour stats\nWPM: {}\nAccuracy: {}%\nMistakes: {}",
                 history,
                 wpm.round(),
                 accuracy.round(),
                 self.mistake_count
             );
+        }
+        if self.error.is_some() {
+            println!("{}", self.error.as_ref().unwrap());
         }
         return Ok(());
     }
@@ -189,11 +188,6 @@ impl App<'_> {
             Event::Backspace => self.handle_backspace().await,
             Event::Render => self.render().await?,
             Event::ForceRender => {
-                let (col, row) = size()?;
-                if col < MIN_TERM_COL || row < MIN_TERM_ROW {
-                    self.running = false;
-                    return Ok(());
-                }
                 self.should_render = true;
                 self.render().await?;
             }
@@ -249,7 +243,19 @@ impl App<'_> {
         }
 
         let (cols, rows) = size()?;
-        let lines = App::format_quote(self.raw_quote, cols).await?;
+        if cols < MIN_TERM_COL || rows < MIN_TERM_ROW {
+            self.error = Some(TyperError::TerminalTooSmallError(TerminalTooSmallError));
+            self.running = false;
+            return Ok(());
+        }
+        let lines = match App::format_quote(self.raw_quote, cols).await {
+            Ok(v) => v,
+            Err(e) => {
+                self.error = Some(TyperError::WordTooLongError(e));
+                self.running = false;
+                return Ok(());
+            }
+        };
         let margin =
             (cols - lines.iter().map(|line| line.join(" ").len()).max().unwrap() as u16) / 2;
         let current_line = lines
