@@ -27,10 +27,10 @@ use crate::{
 };
 
 pub const TICK_RATE: u64 = 1000 / 20;
-const MIN_TERM_COL: u16 = 65;
-const MIN_TERM_ROW: u16 = 15;
+const MIN_TERM_COL: u16 = 40;
+const MIN_TERM_ROW: u16 = 10;
 const MAX_QUOTE_LINE: u16 = 80;
-const MIN_MARGIN: u16 = 10;
+const MIN_MARGIN: u16 = 4;
 
 pub struct App<'a> {
     stdout: Stdout,
