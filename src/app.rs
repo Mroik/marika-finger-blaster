@@ -187,13 +187,10 @@ impl App<'_> {
             Event::KeyPress(k) => self.handle_keypress(k).await?,
             Event::Backspace => self.handle_backspace().await,
             Event::Render => self.render().await?,
-            Event::ForceRender => {
-                self.should_render = true;
-                self.render().await?;
-            }
+            Event::ForceRender => (),
         }
 
-        if event != Event::Render && event != Event::ForceRender {
+        if event != Event::Render {
             self.should_render = true;
         }
         return Ok(());
