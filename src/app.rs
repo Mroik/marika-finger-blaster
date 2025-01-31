@@ -349,8 +349,8 @@ impl App<'_> {
             .queue(MoveToColumn(margin))?;
 
         // Next line
-        if current_line < lines.len() - 1 {
-            let last_rendered = if current_line == 0 { 2 } else { 1 };
+        if lines.len() > 1 && current_line < lines.len() - 1 {
+            let last_rendered = if current_line == 0 && lines.len() > 2 { 2 } else { 1 };
             for line in &lines[current_line + 1..current_line + 1 + last_rendered] {
                 self.stdout
                     .queue(SetForegroundColor(Color::Reset))?
