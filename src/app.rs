@@ -253,8 +253,14 @@ impl App<'_> {
                 return Ok(());
             }
         };
-        let margin =
-            (cols - lines.iter().map(|line| line.join(" ").len()).max().unwrap() as u16) / 2;
+        let margin = (cols
+            - lines
+                .iter()
+                .map(|line| line.join(" ").chars().count())
+                .max()
+                .unwrap() as u16)
+            / 2
+            + 1; // Terminals index starting with 1 instead of 0
         let current_line = lines
             .iter()
             .enumerate()
@@ -350,7 +356,11 @@ impl App<'_> {
 
         // Next line
         if lines.len() > 1 && current_line < lines.len() - 1 {
-            let last_rendered = if current_line == 0 && lines.len() > 2 { 2 } else { 1 };
+            let last_rendered = if current_line == 0 && lines.len() > 2 {
+                2
+            } else {
+                1
+            };
             for line in &lines[current_line + 1..current_line + 1 + last_rendered] {
                 self.stdout
                     .queue(SetForegroundColor(Color::Reset))?
