@@ -198,18 +198,15 @@ impl App<'_> {
 
     async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
         self.state.buffer.push(k);
+        let buffer_length = self.state.buffer.chars().count();
+        let current_word = self.quote[self.state.current];
         let last_byte = self.state.buffer.char_indices().last().unwrap().0;
-        let is_word_completed = self.state.buffer[..last_byte] == *self.quote[self.state.current];
-        let is_text_completed = self.state.buffer == self.quote[self.state.current]
-            && self.state.current == self.quote.len() - 1;
-        let is_correct = self.state.buffer.chars().count()
-            <= self.quote[self.state.current].chars().count()
+        let is_word_completed = self.state.buffer[..last_byte] == *current_word;
+        let is_text_completed =
+            self.state.buffer == current_word && self.state.current == self.quote.len() - 1;
+        let is_correct = buffer_length <= current_word.chars().count()
             && self.state.buffer.chars().last().unwrap()
-                == self.quote[self.state.current]
-                    .chars()
-                    .nth(self.state.buffer.chars().count() - 1)
-                    .unwrap();
-        let miss_word = self.state.current;
+                == current_word.chars().nth(buffer_length - 1).unwrap();
 
         if is_word_completed && k == ' ' {
             self.state.buffer.clear();
@@ -219,9 +216,9 @@ impl App<'_> {
             self.completed = true;
         } else if !is_correct {
             self.mistake_count += 1;
-            if self.state.buffer.chars().count() <= self.quote[miss_word].chars().count() {
+            if buffer_length <= current_word.chars().count() {
                 self.mistakes
-                    .insert((miss_word, self.state.buffer.chars().count() - 1));
+                    .insert((self.state.current, buffer_length - 1));
             }
         }
 
@@ -346,7 +343,7 @@ impl App<'_> {
                     });
                     self.stdout.queue(Print(remaining))?;
                 }
-                (_, _) => (),
+                _ => (),
             }
             self.stdout.queue(Print(' '))?;
         }
