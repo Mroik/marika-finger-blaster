@@ -13,7 +13,6 @@ use rand::{thread_rng, Rng};
 
 #[derive(Parser)]
 struct Args {
-    #[arg(short, long)]
     quote: String,
 }
 

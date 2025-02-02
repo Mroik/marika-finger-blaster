@@ -181,9 +181,7 @@ impl App<'_> {
     async fn process(&mut self) -> Result<(), Box<dyn Error>> {
         let event = self.event_rx.recv().await.unwrap();
         match event {
-            Event::Terminate => {
-                self.running = false;
-            }
+            Event::Terminate => self.running = false,
             Event::KeyPress(k) => self.handle_keypress(k).await?,
             Event::Backspace => self.handle_backspace().await,
             Event::Render => self.render().await?,
@@ -332,8 +330,7 @@ impl App<'_> {
                         a.push(*b);
                         a
                     });
-                    self.stdout.queue(Print(remaining))?;
-                    self.stdout.queue(SavePosition)?;
+                    self.stdout.queue(Print(remaining))?.queue(SavePosition)?;
                 }
                 (ccc, vvv) if ccc > vvv => {
                     self.stdout.queue(SetForegroundColor(Color::Reset))?;
