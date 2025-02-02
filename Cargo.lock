@@ -245,6 +245,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
+name = "marika-finger-blaster"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "crossterm",
+ "rand",
+ "tokio",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,16 +489,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "typer"
-version = "0.1.0"
-dependencies = [
- "clap",
- "crossterm",
- "rand",
- "tokio",
 ]
 
 [[package]]
