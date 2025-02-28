@@ -24,21 +24,14 @@ pub async fn handle_input(sender: &Sender<Event>) -> Result<(), Box<dyn Error>> 
             //crossterm::event::Event::FocusLost => todo!(),
             //crossterm::event::Event::Paste(_) => todo!(),
             crossterm::event::Event::Resize(_, _) => sender.send(Event::ForceRender).await?,
-            crossterm::event::Event::Key(key_event) => {
-                if key_event.code == KeyCode::Char('c')
-                    && key_event.modifiers == KeyModifiers::CONTROL
-                {
-                    sender.send(Event::Terminate).await?;
-                    return Ok(());
+            crossterm::event::Event::Key(key_event) => match key_event.code {
+                KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => {
+                    sender.send(Event::Terminate).await?
                 }
-                if key_event.code == KeyCode::Backspace {
-                    sender.send(Event::Backspace).await?;
-                    return Ok(());
-                }
-                if let KeyCode::Char(c) = key_event.code {
-                    sender.send(Event::KeyPress(c)).await?;
-                }
-            }
+                KeyCode::Backspace => sender.send(Event::Backspace).await?,
+                KeyCode::Char(c) => sender.send(Event::KeyPress(c)).await?,
+                _ => (),
+            },
             _ => (),
         }
     }
