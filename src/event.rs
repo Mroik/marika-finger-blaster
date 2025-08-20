@@ -1,6 +1,6 @@
 use std::{error::Error, time::Duration};
 
-use crossterm::event::{poll, read, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyModifiers, poll, read};
 use tokio::sync::mpsc::Sender;
 
 use crate::app::TICK_RATE;

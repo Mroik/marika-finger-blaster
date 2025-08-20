@@ -8,13 +8,13 @@ pub mod state;
 use std::{
     error::Error,
     fs::read_to_string,
-    io::{stdin, IsTerminal, Read},
+    io::{IsTerminal, Read, stdin},
     path::Path,
 };
 
 use app::App;
 use clap::Parser;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 
 #[derive(Parser)]
 struct Args {

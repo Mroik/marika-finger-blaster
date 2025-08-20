@@ -1,28 +1,28 @@
 use std::{
     collections::HashSet,
     error::Error,
-    io::{stdout, Stdout, Write},
+    io::{Stdout, Write, stdout},
     time::Duration,
 };
 
 use crossterm::{
+    ExecutableCommand, QueueableCommand,
     cursor::{MoveDown, MoveTo, MoveToColumn, RestorePosition, SavePosition, SetCursorStyle},
     style::{Color, Print, SetForegroundColor},
     terminal::{
-        disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
-        LeaveAlternateScreen,
+        Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+        enable_raw_mode, size,
     },
-    ExecutableCommand, QueueableCommand,
 };
 use tokio::{
     spawn,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{Receiver, Sender, channel},
     time::Instant,
 };
 
 use crate::{
     error::{TerminalTooSmallError, TyperError, WordTooLongError},
-    event::{handle_input, Event},
+    event::{Event, handle_input},
     state::State,
 };
 
@@ -49,7 +49,7 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
-    pub fn new(quote: &str) -> App {
+    pub fn new(quote: &str) -> App<'_> {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
         App {
             stdout: stdout(),
