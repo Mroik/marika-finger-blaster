@@ -68,43 +68,14 @@ impl App<'_> {
         }
     }
 
-    async fn format_quote(quote: &str, row_len: u16) -> Result<Vec<Vec<&str>>, WordTooLongError> {
-        let max = if row_len - (MIN_MARGIN * 2) < MAX_QUOTE_LINE {
-            row_len - (MIN_MARGIN * 2)
-        } else {
-            MAX_QUOTE_LINE
-        };
-        let mut counter = 0;
-        let mut lines = Vec::new();
-        let mut line = Vec::new();
-        for w in quote.split_whitespace().filter(|s| !s.is_empty()) {
-            let w_len = w.chars().count();
-            if w_len > max as usize {
-                return Err(WordTooLongError::new(w, max));
-            }
-
-            if w_len + counter > max as usize {
-                lines.push(line);
-                line = Vec::new();
-                line.push(w);
-                counter = w_len + 1;
-            } else {
-                line.push(w);
-                counter += w_len + 1;
-            }
-        }
-        lines.push(line);
-        return Ok(lines);
-    }
-
     async fn run(&mut self) -> Result<(f64, f64, String), Box<dyn Error>> {
         self.stdout
             .execute(EnterAlternateScreen)?
             .execute(SetCursorStyle::SteadyBar)?;
         enable_raw_mode()?;
 
-        let (input_ks_tx, input_ks_rx): (Sender<()>, Receiver<()>) = channel(1);
-        let (tick_ks_tx, tick_ks_rx): (Sender<()>, Receiver<()>) = channel(1);
+        let (input_ks_tx, input_ks_rx) = channel(1);
+        let (tick_ks_tx, tick_ks_rx) = channel(1);
         spawn(start_input_handler(self.event_tx.clone(), input_ks_rx));
         spawn(start_tick_generator(self.event_tx.clone(), tick_ks_rx));
 
@@ -240,7 +211,7 @@ impl App<'_> {
             self.running = false;
             return Ok(());
         }
-        let lines = match App::format_quote(self.raw_quote, cols).await {
+        let lines = match format_quote(self.raw_quote, cols).await {
             Ok(v) => v,
             Err(e) => {
                 self.error = Some(TyperError::WordTooLongError(e));
@@ -390,4 +361,33 @@ async fn start_input_handler(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
             _ = kill_switch.recv() => return,
         }
     }
+}
+
+async fn format_quote(quote: &str, row_len: u16) -> Result<Vec<Vec<&str>>, WordTooLongError> {
+    let max = if row_len - (MIN_MARGIN * 2) < MAX_QUOTE_LINE {
+        row_len - (MIN_MARGIN * 2)
+    } else {
+        MAX_QUOTE_LINE
+    };
+    let mut counter = 0;
+    let mut lines = Vec::new();
+    let mut line = Vec::new();
+    for w in quote.split_whitespace().filter(|s| !s.is_empty()) {
+        let w_len = w.chars().count();
+        if w_len > max as usize {
+            return Err(WordTooLongError::new(w, max));
+        }
+
+        if w_len + counter > max as usize {
+            lines.push(line);
+            line = Vec::new();
+            line.push(w);
+            counter = w_len + 1;
+        } else {
+            line.push(w);
+            counter += w_len + 1;
+        }
+    }
+    lines.push(line);
+    return Ok(lines);
 }
