@@ -18,6 +18,9 @@ use rand::{Rng, thread_rng};
 
 #[derive(Parser)]
 struct Args {
+    /// Turns all text into lowercase (NOOB mode)
+    #[arg(short, long)]
+    lower: bool,
     quote: String,
 }
 
@@ -41,18 +44,22 @@ fn generate_quotes(path: &Path) -> Result<Vec<String>, Box<dyn Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let quote = if !stdin().is_terminal() {
+    let args = Args::parse();
+    let mut quote = if !stdin().is_terminal() {
         let mut b = Vec::new();
         stdin().read_to_end(&mut b).unwrap();
         String::from_utf8(b).unwrap()
     } else {
-        let args = Args::parse();
         let path = Path::new(&args.quote);
         let mut quotes = generate_quotes(path).unwrap();
         let mut rng = thread_rng();
         let chosen = rng.gen_range(0..quotes.len());
         quotes.remove(chosen)
     };
+
+    if args.lower {
+        quote = quote.to_lowercase();
+    }
 
     // TODO Add more options to choose quotes
     let mut app = App::new(&quote);
