@@ -74,10 +74,8 @@ impl App<'_> {
             .execute(SetCursorStyle::SteadyBar)?;
         enable_raw_mode()?;
 
-        let (input_ks_tx, input_ks_rx) = channel(1);
-        let (tick_ks_tx, tick_ks_rx) = channel(1);
-        spawn(start_input_handler(self.event_tx.clone(), input_ks_rx));
-        spawn(start_tick_generator(self.event_tx.clone(), tick_ks_rx));
+        spawn(start_input_handler(self.event_tx.clone()));
+        spawn(start_tick_generator(self.event_tx.clone()));
 
         self.running = true;
         self.start = Some(Instant::now());
@@ -95,9 +93,6 @@ impl App<'_> {
         let wpm = total_chars / 5.0 * 60000.0 / time as f64;
         let accuracy = total_chars * 100.0 / (total_chars + self.mistake_count as f64);
         let history = self.generate_mistake_locations().await;
-
-        input_ks_tx.send(()).await?;
-        tick_ks_tx.send(()).await?;
 
         disable_raw_mode()?;
         self.stdout.execute(LeaveAlternateScreen)?;
@@ -342,24 +337,19 @@ impl App<'_> {
     }
 }
 
-async fn start_tick_generator(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
+async fn start_tick_generator(ev: Sender<Event>) {
     loop {
-        tokio::select! {
-            _ = async {
-                tokio::time::sleep(Duration::from_millis(TICK_RATE)).await;
-                ev.send(Event::Render).await
-            } => (),
-            _ = kill_switch.recv() => return,
+        tokio::time::sleep(Duration::from_millis(TICK_RATE)).await;
+        if ev.is_closed() {
+            break;
         }
+        ev.send(Event::Render).await.unwrap();
     }
 }
 
-async fn start_input_handler(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
-    loop {
-        tokio::select! {
-            _ = handle_input(&ev) => (),
-            _ = kill_switch.recv() => return,
-        }
+async fn start_input_handler(ev: Sender<Event>) {
+    while !ev.is_closed() {
+        handle_input(&ev).await.unwrap();
     }
 }
 
