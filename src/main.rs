@@ -2,7 +2,7 @@
 
 mod app;
 pub mod error;
-pub mod event;
+pub mod input;
 pub mod state;
 
 use std::{

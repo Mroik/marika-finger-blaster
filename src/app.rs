@@ -22,7 +22,7 @@ use tokio::{
 
 use crate::{
     error::{TerminalTooSmallError, TyperError, WordTooLongError},
-    event::{Event, handle_input},
+    input::{Event, handle_input},
     state::State,
 };
 
