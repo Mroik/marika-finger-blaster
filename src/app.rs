@@ -15,9 +15,10 @@ use crossterm::{
     },
 };
 use tokio::{
-    spawn,
+    select,
     sync::mpsc::{Receiver, Sender, channel},
-    time::Instant,
+    task::spawn_blocking,
+    time::{self, Instant},
 };
 
 use crate::{
@@ -68,21 +69,16 @@ impl App<'_> {
         }
     }
 
-    async fn run(&mut self) -> Result<(f64, f64, String), Box<dyn Error>> {
+    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         self.stdout
             .execute(EnterAlternateScreen)?
             .execute(SetCursorStyle::SteadyBar)?;
         enable_raw_mode()?;
 
-        let (input_ks_tx, input_ks_rx) = channel(1);
-        let (tick_ks_tx, tick_ks_rx) = channel(1);
-        spawn(start_input_handler(self.event_tx.clone(), input_ks_rx));
-        spawn(start_tick_generator(self.event_tx.clone(), tick_ks_rx));
-
         self.running = true;
         self.start = Some(Instant::now());
         while self.running {
-            self.process().await?;
+            self.run().await?;
         }
         let time = self.start.unwrap().elapsed().as_millis();
         let total_chars = self
@@ -96,16 +92,9 @@ impl App<'_> {
         let accuracy = total_chars * 100.0 / (total_chars + self.mistake_count as f64);
         let history = self.generate_mistake_locations().await;
 
-        input_ks_tx.send(()).await?;
-        tick_ks_tx.send(()).await?;
-
         disable_raw_mode()?;
         self.stdout.execute(LeaveAlternateScreen)?;
-        return Ok((wpm, accuracy, history));
-    }
 
-    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
-        let (wpm, accuracy, history) = self.run().await?;
         if self.completed {
             println!(
                 "Mistake history:\n{}\n\nYour stats\nWPM: {}\nAccuracy: {}%\nMistakes: {}",
@@ -149,18 +138,34 @@ impl App<'_> {
         return a.join(" ");
     }
 
-    async fn process(&mut self) -> Result<(), Box<dyn Error>> {
-        let event = self.event_rx.recv().await.unwrap();
-        match event {
-            Event::Terminate => self.running = false,
-            Event::KeyPress(k) => self.handle_keypress(k).await?,
-            Event::Backspace => self.handle_backspace().await,
-            Event::Render => self.render().await?,
-            Event::ForceRender => (),
-        }
+    async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        let ev = self.event_tx.clone();
+        let mut tick_render = time::interval(Duration::from_millis(TICK_RATE));
 
-        if event != Event::Render {
-            self.should_render = true;
+        // TODO: Handle errors
+        select! {
+            event = self.event_rx.recv() => {
+                let event = event.unwrap();
+                match event {
+                    Event::Terminate => self.running = false,
+                    Event::KeyPress(k) => self.handle_keypress(k).await?,
+                    Event::Backspace => self.handle_backspace().await,
+                    Event::Render => self.render().await?,
+                    Event::ForceRender => (),
+                }
+
+                if event != Event::Render {
+                    self.should_render = true;
+                }
+            }
+            Ok(sst) = spawn_blocking(|| crossterm::event::poll(Duration::from_millis(TICK_RATE))) => {
+                if sst.unwrap() {
+                    handle_input(self.event_tx.clone()).await.unwrap();
+                }
+            },
+            _ = tick_render.tick() => {
+                ev.send(Event::Render).await.unwrap();
+            },
         }
         return Ok(());
     }
@@ -261,7 +266,7 @@ impl App<'_> {
             .iter()
             .map(|line| line.len())
             .sum::<usize>();
-        for i in 0..lines[current_line].len() {
+        for (i, _) in lines[current_line].iter().enumerate() {
             if i + offset < self.state.current {
                 self.stdout
                     .queue(SetForegroundColor(Color::Green))?
@@ -339,27 +344,6 @@ impl App<'_> {
         self.stdout.flush()?;
         self.should_render = false;
         return Ok(());
-    }
-}
-
-async fn start_tick_generator(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
-    loop {
-        tokio::select! {
-            _ = async {
-                tokio::time::sleep(Duration::from_millis(TICK_RATE)).await;
-                ev.send(Event::Render).await
-            } => (),
-            _ = kill_switch.recv() => return,
-        }
-    }
-}
-
-async fn start_input_handler(ev: Sender<Event>, mut kill_switch: Receiver<()>) {
-    loop {
-        tokio::select! {
-            _ = handle_input(&ev) => (),
-            _ = kill_switch.recv() => return,
-        }
     }
 }
 
