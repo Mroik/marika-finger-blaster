@@ -21,7 +21,7 @@ struct Args {
     /// Turns all text into lowercase (NOOB mode)
     #[arg(short, long)]
     lower: bool,
-    quote: String,
+    quote: Option<String>,
 }
 
 fn generate_quotes(path: &Path) -> Result<Vec<String>, Box<dyn Error>> {
@@ -49,12 +49,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut b = Vec::new();
         stdin().read_to_end(&mut b).unwrap();
         String::from_utf8(b).unwrap()
-    } else {
-        let path = Path::new(&args.quote);
+    } else if let Some(q) = &args.quote {
+        let path = Path::new(q);
         let mut quotes = generate_quotes(path).unwrap();
         let mut rng = thread_rng();
         let chosen = rng.gen_range(0..quotes.len());
         quotes.remove(chosen)
+    } else {
+        todo!()
     };
 
     if args.lower {
