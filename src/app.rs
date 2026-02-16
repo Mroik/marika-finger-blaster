@@ -27,7 +27,7 @@ use crate::{
     state::State,
 };
 
-pub const TICK_RATE: u64 = 1000 / 20;
+pub const TICK_RATE: u64 = 1000 / 60;
 pub const MIN_TERM_COL: u16 = 40;
 pub const MIN_TERM_ROW: u16 = 10;
 const MAX_QUOTE_LINE: u16 = 80;
@@ -164,27 +164,28 @@ impl App<'_> {
 
     async fn handle_keypress(&mut self, k: char) -> Result<()> {
         self.state.buffer.push(k);
-        let buffer_length = self.state.buffer.chars().count();
+        self.state.buffer_len += 1;
         let current_word = self.quote[self.state.current];
         let last_byte = self.state.buffer.char_indices().last().unwrap().0;
         let is_word_completed = self.state.buffer[..last_byte] == *current_word;
         let is_text_completed =
             self.state.buffer == current_word && self.state.current == self.quote.len() - 1;
-        let is_correct = buffer_length <= current_word.chars().count()
+        let is_correct = self.state.buffer_len <= current_word.chars().count()
             && self.state.buffer.chars().last().unwrap()
-                == current_word.chars().nth(buffer_length - 1).unwrap();
+                == current_word.chars().nth(self.state.buffer_len - 1).unwrap();
 
         if is_word_completed && k == ' ' {
             self.state.buffer.clear();
+            self.state.buffer_len = 0;
             self.state.current += 1;
         } else if is_text_completed {
             self.running = false;
             self.completed = true;
         } else if !is_correct {
             self.mistake_count += 1;
-            if buffer_length <= current_word.chars().count() {
+            if self.state.buffer_len <= current_word.chars().count() {
                 self.mistakes
-                    .insert((self.state.current, buffer_length - 1));
+                    .insert((self.state.current, self.state.buffer_len - 1));
             }
         }
 
@@ -192,8 +193,9 @@ impl App<'_> {
     }
 
     async fn handle_backspace(&mut self) {
-        if !self.state.buffer.is_empty() {
+        if self.state.buffer_len > 0 {
             self.state.buffer.pop();
+            self.state.buffer_len -= 1;
         }
     }
 
@@ -340,12 +342,9 @@ impl App<'_> {
 }
 
 async fn start_tick_generator(ev: Sender<Event>) {
-    loop {
-        tokio::time::sleep(Duration::from_millis(TICK_RATE)).await;
-        if ev.is_closed() {
-            break;
-        }
+    while !ev.is_closed() {
         ev.send(Event::Render).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(TICK_RATE)).await;
     }
 }
 
