@@ -15,7 +15,7 @@ use std::{
 use anyhow::Result;
 use app::App;
 use clap::Parser;
-use rand::{Rng, thread_rng};
+use rand::Rng;
 
 use crate::config::{Quote, get_quoter};
 
@@ -66,8 +66,8 @@ async fn main() -> Result<()> {
     } else if let Some(q) = &args.quote {
         let path = Path::new(q);
         let mut quotes = generate_quotes(path).unwrap();
-        let mut rng = thread_rng();
-        let chosen = rng.gen_range(0..quotes.len());
+        let mut rng = rand::rand_core::UnwrapErr(rand::rngs::SysRng::default());
+        let chosen = rng.next_u64() as usize;
         Quote {
             text: quotes.remove(chosen),
             source: None,

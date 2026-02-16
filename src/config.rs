@@ -1,13 +1,13 @@
 use std::{env, fs, path::PathBuf};
 
 use anyhow::{Result, anyhow};
-use rand::{Rng, rngs::ThreadRng};
+use rand::{RngExt, rand_core::UnwrapErr, rngs::SysRng};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Quoter {
     #[serde(skip)]
-    randomizer: ThreadRng,
+    randomizer: UnwrapErr<SysRng>,
     groups: (
         (usize, usize),
         (usize, usize),
@@ -32,7 +32,10 @@ impl Quoter {
         }
         Ok(self
             .quotes
-            .get(self.randomizer.gen_range(l..=r))
+            .get(
+                self.randomizer
+                    .sample(rand::distr::uniform::Uniform::new(l, r + 1)?),
+            )
             .cloned()
             .unwrap())
     }
