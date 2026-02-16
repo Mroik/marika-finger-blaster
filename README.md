@@ -11,3 +11,6 @@ At the end it shows your:
 - Accuracy.
 
 It even has a mistake history highlighting where were your mistakes. 
+
+## Quote file
+You can download example quote files from the Monkeytype [repo](https://raw.githubusercontent.com/monkeytypegame/monkeytype/629c82e112a2db2122c789dc6abe970b82c3f8c5/frontend/static/quotes/english.json).
