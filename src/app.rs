@@ -1,10 +1,10 @@
 use std::{
     collections::HashSet,
-    error::Error,
     io::{Stdout, Write, stdout},
     time::Duration,
 };
 
+use anyhow::Result;
 use crossterm::{
     ExecutableCommand, QueueableCommand,
     cursor::{MoveDown, MoveTo, MoveToColumn, RestorePosition, SavePosition, SetCursorStyle},
@@ -21,6 +21,7 @@ use tokio::{
 };
 
 use crate::{
+    config::Quote,
     error::{TerminalTooSmallError, TyperError, WordTooLongError},
     input::{Event, handle_input},
     state::State,
@@ -49,8 +50,9 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
-    pub fn new(quote: &str) -> App<'_> {
+    pub fn new(quote: &Quote) -> App<'_> {
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel(10);
+        let quote = quote.text.as_str();
         App {
             stdout: stdout(),
             quote: quote.split_whitespace().filter(|s| !s.is_empty()).collect(),
@@ -68,7 +70,7 @@ impl App<'_> {
         }
     }
 
-    async fn run(&mut self) -> Result<(f64, f64, String), Box<dyn Error>> {
+    async fn run(&mut self) -> Result<(f64, f64, String)> {
         self.stdout
             .execute(EnterAlternateScreen)?
             .execute(SetCursorStyle::SteadyBar)?;
@@ -99,7 +101,7 @@ impl App<'_> {
         return Ok((wpm, accuracy, history));
     }
 
-    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn start(&mut self) -> Result<()> {
         let (wpm, accuracy, history) = self.run().await?;
         if self.completed {
             println!(
@@ -144,7 +146,7 @@ impl App<'_> {
         return a.join(" ");
     }
 
-    async fn process(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn process(&mut self) -> Result<()> {
         let event = self.event_rx.recv().await.unwrap();
         match event {
             Event::Terminate => self.running = false,
@@ -160,7 +162,7 @@ impl App<'_> {
         return Ok(());
     }
 
-    async fn handle_keypress(&mut self, k: char) -> Result<(), Box<dyn Error>> {
+    async fn handle_keypress(&mut self, k: char) -> Result<()> {
         self.state.buffer.push(k);
         let buffer_length = self.state.buffer.chars().count();
         let current_word = self.quote[self.state.current];
@@ -195,7 +197,7 @@ impl App<'_> {
         }
     }
 
-    async fn render(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn render(&mut self) -> Result<()> {
         if !self.should_render {
             return Ok(());
         }
